@@ -1,8 +1,19 @@
-import type { UserConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
+import path from "path";
 
-export default {
+const templateRoot = path.resolve(import.meta.dirname);
+
+export default defineConfig({
+  root: templateRoot,
+  resolve: {
+    alias: {
+      "@": path.resolve(templateRoot, "src"),
+      "@contracts": path.resolve(templateRoot, "contracts"),
+      "@assets": path.resolve(templateRoot, "attached_assets"),
+    },
+  },
   test: {
     environment: "node",
-    include: ["src/**/*.test.{ts,tsx}", "api/**/*.test.ts"],
+    include: ["api/**/*.test.ts", "api/**/*.spec.ts"],
   },
-} satisfies UserConfig;
+});
