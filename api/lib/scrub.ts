@@ -1,7 +1,11 @@
 // Secret scrubbing, shared by both log sinks.
 //
 // It lives in its own module because BOTH halves of app.log need it: the browser
-// sink (clientlog.ts) and the server logger (logger.ts).
+// sink (clientlog.ts) and the server logger (logger.ts). The browser side has
+// always scrubbed, so a doc claim like "secrets are redacted before they are
+// written" held for browser lines and silently did NOT hold for server lines —
+// the caller most likely to pass a URL with a token is server code
+// (`log.error(msg, { url })`), so the unprotected half was the one that mattered.
 //
 // What it catches: values under a key that names a credential, and
 // `Bearer …` / `?token=…` inside any string (the leak usually hides in a URL

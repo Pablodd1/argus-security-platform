@@ -78,35 +78,53 @@ export function createOAuthCallbackHandler() {
     const error = c.req.query("error");
     const errorDescription = c.req.query("error_description");
 
-    // OAuth error from the provider (user denied, misconfiguration, ...)
     if (error) {
-      return c.json({ error, error_description: errorDescription }, 400);
+      if (error === "access_denied") {
+        return c.redirect("/", 302);
+      }
+      return c.json(
+        { error, error_description: errorDescription },
+        400,
+      );
     }
+
     if (!code || !state) {
-      return c.json({ error: "missing code or state" }, 400);
+      return c.json({ error: "code and state are required" }, 400);
     }
 
-    // Decode the state to recover where the user was headed.
-    let redirectTo = "/";
     try {
-      redirectTo = JSON.parse(Buffer.from(state, "base64url").toString()).r ?? "/";
-    } catch {
-      /* keep default */
+      const redirectUri = atob(state);
+      const tokenResp = await exchangeAuthCode(code, redirectUri);
+      const { userId } = await verifyAccessToken(tokenResp.access_token);
+      const userProfile = await kimiUsers.getProfile(tokenResp.access_token);
+      if (!userProfile) {
+        throw new Error("Failed to fetch user profile from Kimi Open");
+      }
+
+      await upsertUser({
+        unionId: userId,
+        name: userProfile.name,
+        avatar: userProfile.avatar_url,
+        lastSignInAt: new Date(),
+      });
+
+      const token = await signSessionToken({
+        unionId: userId,
+        clientId: env.appId,
+      });
+
+      const cookieOpts = getSessionCookieOptions(c.req.raw.headers);
+      setCookie(c, Session.cookieName, token, {
+        ...cookieOpts,
+        maxAge: Session.maxAgeMs / 1000,
+      });
+
+      return c.redirect("/", 302);
+    } catch (error) {
+      console.error("[OAuth] Callback failed", error);
+      return c.json({ error: "OAuth callback failed" }, 500);
     }
-
-    const redirectUri = new URL(c.req.url).origin + "/api/oauth/callback";
-    const { access_token } = await exchangeAuthCode(code, redirectUri);
-    const { userId, clientId } = await verifyAccessToken(access_token);
-    const profile = await kimiUsers.me(access_token);
-
-    await upsertUser({
-      unionId: userId,
-      name: profile?.name ?? "ARGUS Operator",
-      avatar: profile?.avatar ?? null,
-    });
-
-    const token = await signSessionToken({ unionId: userId, clientId });
-    setCookie(c, Session.cookieName, token, getSessionCookieOptions());
-    return c.redirect(redirectTo);
   };
 }
+
+export { exchangeAuthCode, verifyAccessToken };

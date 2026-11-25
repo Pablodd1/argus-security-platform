@@ -11,6 +11,12 @@
 // log line written while that request is in flight. The browser reads the header
 // and attaches the same id to the lines it POSTs to /api/log. One request, one
 // id, two sinks.
+//
+// Implementation note: the id lives in an AsyncLocalStorage rather than in the
+// log call's own argument, so app code keeps calling `log.error(msg, ctx)` and
+// the correlation is added for free. Node's ALS is the right primitive here —
+// it survives `await` boundaries, so a handler that logs after an await still
+// carries the id of the request that started it.
 import { AsyncLocalStorage } from "async_hooks";
 
 export const REQUEST_ID_HEADER = "x-request-id";

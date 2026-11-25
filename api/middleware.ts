@@ -6,10 +6,14 @@ import { log } from "./lib/logger";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
-  // A procedure that throws never reaches app.onError — the tRPC fetch adapter
-  // catches it and returns its own 500 JSON. This hook is the server-side safety
-  // net. INTERNAL_SERVER_ERROR only: deliberate business answers (UNAUTHORIZED /
-  // FORBIDDEN) are not crashes and would drown the log.
+  // G9: a procedure that throws never reaches app.onError — the tRPC fetch
+  // adapter catches it and returns its own 500 JSON, so the Hono error handler
+  // is bypassed entirely. That left the most common real failure (a mutation
+  // 500ing) with NO structured record in app.log on the server side; it only
+  // appeared if the caller happened to log it in its own catch. This hook is the
+  // missing server-side safety net. INTERNAL_SERVER_ERROR only: the TRPCErrors
+  // thrown below (UNAUTHORIZED / FORBIDDEN) are deliberate business answers, not
+  // crashes, and logging those would drown the file.
   errorFormatter({ shape, error }) {
     if (error.code === "INTERNAL_SERVER_ERROR") {
       log.error("trpc procedure failed", {
