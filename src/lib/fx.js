@@ -108,7 +108,8 @@ function stage(host, draw, {alpha = true, gl = false, scale = 1, fps = 0} = {}) 
 /* ── aurora ────────────────────────────────────────────────────────────────
  * The shader ground. Three domain-warped fbm lobes in the page's own accent
  * and support colours, at very low amplitude, so it reads as light in a room
- * rather than as a graphic.
+ * rather than as a graphic. This is the single highest-leverage effect here: it
+ * costs one <canvas> and turns a flat page into a lit one.
  */
 const AURORA_FS = `precision highp float;
 uniform vec2 u_res; uniform float u_t, u_amp, u_scale;
@@ -178,7 +179,9 @@ function shader(host, fs, uniforms, opts = {}) {
 }
 
 /* The ground is a slow, soft gradient, so it is rendered at 40% of device
-   resolution and at 30 Hz. */
+   resolution and at 30 Hz. Full-res 60 Hz cost ~4x the fragments for a
+   difference nobody can see — and it was dropping the whole page to 30 fps,
+   because a fullscreen fbm competes with everything else for the GPU. */
 export function aurora(host, {amp = .5, scale = 2.2, res = .4, fps = 30,
                               keys = ['--fx-1', '--fx-2', '--fx-3']} = {}) {
   const n = c => rgb(c).map(v => v / 255);
@@ -193,7 +196,8 @@ export function aurora(host, {amp = .5, scale = 2.2, res = .4, fps = 30,
 
 /* ── constellation ─────────────────────────────────────────────────────────
  * Points drift, and any two closer than a threshold are joined by a line whose
- * alpha falls off with distance.
+ * alpha falls off with distance — so the structure appears and dissolves on
+ * its own rather than being drawn.
  */
 export function constellation(host, {count = 64, link = 132, speed = .24, alpha = .5, fps = 30} = {}) {
   let pts = [];
@@ -234,7 +238,8 @@ export function constellation(host, {count = 64, link = 132, speed = .24, alpha 
 
 /* ── radar ─────────────────────────────────────────────────────────────────
  * The sweep is a gradient wedge, and each blip is drawn with alpha proportional
- * to how long ago the beam passed it — the decay is the whole effect.
+ * to how long ago the beam passed it — the decay is the whole effect, and it
+ * is what makes it read as live rather than as a spinning graphic.
  */
 export function radar(host, {period = 4.2, blips = 9, rings = 4} = {}) {
   const seed = i => ((Math.sin(i * 127.1) * 43758.5453) % 1 + 1) % 1;
@@ -274,7 +279,8 @@ export function radar(host, {period = 4.2, blips = 9, rings = 4} = {}) {
 }
 
 /* ── topo ──────────────────────────────────────────────────────────────────
- * Marching-squares contours of a drifting noise field.
+ * Marching-squares contours of a drifting noise field: the lines look surveyed
+ * rather than drawn, and cost one pass over a coarse grid.
  */
 export function topo(host, {step = 26, levels = 7, speed = .05, alpha = .5} = {}) {
   const hash = (x, y) => ((Math.sin(x * 127.1 + y * 311.7) * 43758.5453) % 1 + 1) % 1;
@@ -317,7 +323,8 @@ export function topo(host, {step = 26, levels = 7, speed = .05, alpha = .5} = {}
 }
 
 /* ── ridgeline ─────────────────────────────────────────────────────────────
- * Stacked filled profiles scrolling at different rates — the parallax does the work.
+ * Stacked filled profiles scrolling at different rates — the parallax does the
+ * work; each layer on its own is a single sine sum.
  */
 export function ridgeline(host, {lines = 11, speed = .16, alpha = .6} = {}) {
   return stage(host, (a, t) => {
@@ -342,7 +349,8 @@ export function ridgeline(host, {lines = 11, speed = .16, alpha = .6} = {}) {
 }
 
 /* ── hud grid ──────────────────────────────────────────────────────────────
- * A ground plane in perspective plus a horizon glow.
+ * A ground plane in perspective plus a horizon glow. Cheap, and it is the single
+ * cue that says "control room" faster than anything else on this list.
  */
 export function hudgrid(host, {speed = .18, alpha = .5, horizon = .42} = {}) {
   return stage(host, (a, t) => {
@@ -353,6 +361,7 @@ export function hudgrid(host, {speed = .18, alpha = .5, horizon = .42} = {}) {
     g.addColorStop(0, rgba(acc, 0)); g.addColorStop(1, rgba(acc, .13 * alpha));
     c.fillStyle = g; c.fillRect(0, hz - h * .12, w, h * .14);
     c.lineWidth = 1;
+    // Rows: exponential spacing so they crowd at the horizon like real perspective.
     for (let i = 0; i < 26; i++) {
       const f = ((i + (t * speed) % 1) / 26) ** 2.6;
       const y = hz + f * (h - hz);
@@ -367,7 +376,8 @@ export function hudgrid(host, {speed = .18, alpha = .5, horizon = .42} = {}) {
 }
 
 /* ── radial gauge ──────────────────────────────────────────────────────────
- * A dial with a glow proportional to its own value.
+ * A dial with a glow proportional to its own value, so a screen of them reads at
+ * a glance from across a room — the actual job of a wall dashboard.
  */
 export function gauge(host, {value = 0, max = 100, label = '', unit = '%', spring = .09} = {}) {
   let cur = 0, target = value;
@@ -385,6 +395,7 @@ export function gauge(host, {value = 0, max = 100, label = '', unit = '%', sprin
     c.strokeStyle = rgba(acc, .95);
     c.beginPath(); c.arc(cx, cy, R, A0, A0 + (A1 - A0) * k); c.stroke();
     c.restore();
+    // Ticks read as calibration; without them a ring is just a progress bar.
     for (let i = 0; i <= 10; i++) {
       const th = A0 + (A1 - A0) * i / 10, r0 = R * 1.16, r1 = R * (i % 5 ? 1.22 : 1.28);
       c.strokeStyle = rgba(ink, i / 10 <= k ? .4 : .16); c.lineWidth = 1;
@@ -404,7 +415,10 @@ export function gauge(host, {value = 0, max = 100, label = '', unit = '%', sprin
   return s;
 }
 
-/* ── sparkline ribbon ────────────────────────────────────────────────────── */
+/* ── sparkline ribbon ──────────────────────────────────────────────────────
+ * A value trail that travels rather than redraws — for tickers and live rows
+ * where an ECharts instance per cell would be absurd.
+ */
 export function trail(host, {points = 48, band = .5} = {}) {
   let vals = Array.from({length: points}, (_, i) => Math.sin(i * .3) * .4 + .5);
   const s = stage(host, (a) => {

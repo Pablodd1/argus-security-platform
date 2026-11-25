@@ -257,7 +257,8 @@ export async function globe(host, {
 
   /* ── arcs ──────────────────────────────────────────────────────────────
      A dim static line for "this connection exists" plus a bright travelling head
-     for "it is carrying something now". */
+     for "it is carrying something now". Both are needed — a static line reads as
+     a diagram, a bare moving dot reads as noise. */
   const arcGroup = new THREE.Group(); world.add(arcGroup);
   const heads = [];
   function buildArcs(list) {
@@ -272,6 +273,8 @@ export async function globe(host, {
       arcGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve),
         new THREE.LineBasicMaterial({color: c, transparent: true, opacity: .34, depthWrite: false})));
       // The travelling head is a fixed-length buffer written in place each frame.
+      // setFromPoints() reallocates, and in r170 walks the *attribute* count, so
+      // a shorter slice would read past the end of the array.
       const hg = new THREE.BufferGeometry();
       hg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HEAD * 3), 3));
       const head = new THREE.Line(hg, new THREE.LineBasicMaterial({
@@ -345,6 +348,8 @@ export async function globe(host, {
     heads.forEach(h => {
       const n = h.curve.length, at = (t * h.speed + h.phase) % 1;
       const p = h.head.geometry.attributes.position;
+      // Sampled continuously rather than by index, so the head glides instead of
+      // stepping between vertices — visible at wall scale.
       for (let j = 0; j < HEAD; j++) {
         const u = Math.max(0, at - j * (TAIL / HEAD)) * (n - 1);
         const k = Math.min(n - 2, u | 0), f = u - k;
@@ -439,10 +444,10 @@ export async function globe(host, {
     destroy() { api.stop(); ro.disconnect(); io.disconnect(); renderer.dispose(); cv.remove() },
   };
   addEventListener('kit:theme', () => api.retheme());
-  /* Compile shaders off the main thread when the driver supports it; the first
-     render() otherwise synchronously compiles every program. */
+  /* 着色器能在驱动的并行线程上编译就别堵主线程:第一次 render() 会同步编译
+     全部 program,是启动里最大的一段冻结。不支持的驱动自动回退到同步编译。 */
   if (renderer.compileAsync) {
-    try { await renderer.compileAsync(scene, camera) } catch (e) { /* sync fallback */ }
+    try { await renderer.compileAsync(scene, camera) } catch (e) { /* 首帧同步编译兜底 */ }
   }
   api.start();
   return api;
