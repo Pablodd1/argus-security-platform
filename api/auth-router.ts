@@ -1,12 +1,22 @@
-import { z } from "zod";
-import { authedMutation, createRouter } from "./middleware";
+import * as cookie from "cookie";
+import { Session } from "@contracts/constants";
+import { getSessionCookieOptions } from "./lib/cookies";
+import { createRouter, authedQuery } from "./middleware";
 
-/**
- * Auth router — exposes session info to the frontend.
- * The OAuth flow itself lives in api/kimi/auth.ts (registered in boot.ts).
- */
 export const authRouter = createRouter({
-  me: authedMutation.input(z.void()).mutation(async ({ ctx }) => {
-    return ctx.user;
+  me: authedQuery.query((opts) => opts.ctx.user),
+  logout: authedQuery.mutation(async ({ ctx }) => {
+    const opts = getSessionCookieOptions(ctx.req.headers);
+    ctx.resHeaders.append(
+      "set-cookie",
+      cookie.serialize(Session.cookieName, "", {
+        httpOnly: opts.httpOnly,
+        path: opts.path,
+        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+        secure: opts.secure,
+        maxAge: 0,
+      }),
+    );
+    return { success: true };
   }),
 });

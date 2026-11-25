@@ -1,17 +1,30 @@
-import type { SessionPayload } from "./types";
+import { env } from "../lib/env";
+import type { UserProfile } from "./types";
 
-/** Display-ready user record served to the frontend. */
-export interface PlatformUser {
-  unionId: string;
-  name: string;
-  avatar?: string;
+async function kimiRequest<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T | null> {
+  const resp = await fetch(`${env.kimiOpenUrl}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      ...init?.headers,
+    },
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.warn(
+      `[kimi] Request to ${path} failed (${resp.status}): ${text}`,
+    );
+    return null;
+  }
+  return resp.json() as Promise<T>;
 }
 
-export const kimiUsers = {
-  /** Fetch the platform profile for a verified access token. */
-  async me(_accessToken: string): Promise<PlatformUser | null> {
-    return null; // populated by the OAuth callback in auth.ts
-  },
+export const users = {
+  getProfile: (token: string) =>
+    kimiRequest<UserProfile>("/v1/users/me/profile", token),
 };
-
-export type { SessionPayload };

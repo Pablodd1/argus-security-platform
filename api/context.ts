@@ -1,17 +1,21 @@
-import { initTRPC, TRPCError } from "@trpc/server";
-import superjson from "superjson";
-import type { User } from "./middleware";
+import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
+import type { User } from "@db/schema";
+import { authenticateRequest } from "./kimi/auth";
 
-export interface Context {
-  user: User | null;
+export type TrpcContext = {
+  req: Request;
+  resHeaders: Headers;
+  user?: User;
+};
+
+export async function createContext(
+  opts: FetchCreateContextFnOptions,
+): Promise<TrpcContext> {
+  const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
+  try {
+    ctx.user = await authenticateRequest(opts.req.headers);
+  } catch {
+    // Authentication is optional here
+  }
+  return ctx;
 }
-
-export function createContext(user: User | null): Context {
-  return { user };
-}
-
-export const t = initTRPC.context<Context>().create({
-  transformer: superjson,
-});
-
-export { TRPCError };
