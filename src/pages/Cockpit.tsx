@@ -392,7 +392,7 @@ export default function Cockpit() {
           {crumbs.map((p, i) => (
             <Fragment key={p}>
               {i ? <span>›</span> : null}
-              <span className={i === crumbs.length - 1 ? "cur" : ""}>{p}</span>}
+              <span className={i === crumbs.length - 1 ? "cur" : ""}>{p}</span>
             </Fragment>
           ))}
         </div>
